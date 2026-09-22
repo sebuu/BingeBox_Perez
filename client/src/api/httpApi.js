@@ -1,7 +1,4 @@
 // The real client. Every function here talks to YOUR Express API.
-//
-// This is the file that matters for your finals project. mockApi.js exists so
-// you can build the interface before this has anywhere to point.
 
 const BASE = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -12,7 +9,6 @@ async function request(path, options) {
   })
 
   if (!response.ok) {
-    // Try to use the API's own message; fall back to the status line.
     let message = `${response.status} ${response.statusText}`
     try {
       const body = await response.json()
@@ -26,15 +22,41 @@ async function request(path, options) {
   return response.status === 204 ? null : response.json()
 }
 
-export const listSightings = () => request('/api/sightings')
+function toQuery(params) {
+  const entries = Object.entries(params).filter(([, v]) => v)
+  if (entries.length === 0) return ''
+  return `?${new URLSearchParams(entries).toString()}`
+}
 
-export const getSighting = (id) => request(`/api/sightings/${id}`)
+// ---- media ----
 
-export const createSighting = (input) =>
-  request('/api/sightings', { method: 'POST', body: JSON.stringify(input) })
+export const listMedia = ({ status, type } = {}) =>
+  request(`/api/media${toQuery({ status, type })}`)
 
-export const updateSighting = (id, input) =>
-  request(`/api/sightings/${id}`, { method: 'PUT', body: JSON.stringify(input) })
+export const getMedia = (id) => request(`/api/media/${id}`)
 
-export const deleteSighting = (id) =>
-  request(`/api/sightings/${id}`, { method: 'DELETE' })
+export const createMedia = (input) =>
+  request('/api/media', { method: 'POST', body: JSON.stringify(input) })
+
+export const updateMedia = (id, input) =>
+  request(`/api/media/${id}`, { method: 'PUT', body: JSON.stringify(input) })
+
+export const deleteMedia = (id) =>
+  request(`/api/media/${id}`, { method: 'DELETE' })
+
+// ---- reviews ----
+
+export const listReviews = (mediaId) =>
+  request(`/api/media/${mediaId}/reviews`)
+
+export const createReview = (mediaId, input) =>
+  request(`/api/media/${mediaId}/reviews`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+
+export const updateReview = (id, input) =>
+  request(`/api/reviews/${id}`, { method: 'PUT', body: JSON.stringify(input) })
+
+export const deleteReview = (id) =>
+  request(`/api/reviews/${id}`, { method: 'DELETE' })

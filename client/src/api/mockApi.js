@@ -1,20 +1,13 @@
 // The simulated backend.
 //
-// Same function names, same return types, and the same shape of failure as
-// httpApi.js, so your components cannot tell the difference. Data lives in the
-// visitor's own browser and goes no further.
-//
-// This exists so the template's GitHub Pages link works on day one and so you
-// can build the interface before your API is deployed. It is NOT a finished
-// project. See content/extending-your-app page 3.
+// Same function names, same return types, same shape of failure as
+// httpApi.js, so your components cannot tell the difference. Data lives in
+// the visitor's own browser and goes no further.
 
 import seed from './seed.json'
 
-const KEY = 'final-project:sightings'
+const KEY = 'final-project:bingebox'
 
-// A real network is not instant. Keeping this delay is what forces you to build
-// a loading state now, while it is cheap, instead of discovering you need one
-// the day you switch to the real API.
 const delay = (ms = 250) => new Promise((resolve) => setTimeout(resolve, ms))
 
 function read() {
@@ -23,53 +16,109 @@ function read() {
     try {
       return JSON.parse(stored)
     } catch {
-      // Corrupted storage. Start again rather than crashing the app.
       localStorage.removeItem(KEY)
     }
   }
   localStorage.setItem(KEY, JSON.stringify(seed))
-  return seed
+  return structuredClone(seed)
 }
 
-function write(rows) {
-  localStorage.setItem(KEY, JSON.stringify(rows))
-  return rows
+function write(store) {
+  localStorage.setItem(KEY, JSON.stringify(store))
+  return store
 }
 
-export async function listSightings() {
+function uid(prefix) {
+  return `${prefix}${Date.now()}${Math.floor(Math.random() * 1000)}`
+}
+
+// ---- media ----
+
+export async function listMedia({ status, type } = {}) {
   await delay()
-  return read().slice().sort((a, b) => b.reported_at.localeCompare(a.reported_at))
+  const store = read()
+  return store.media
+    .filter((m) => (!status || m.status === status) && (!type || m.type === type))
+    .sort((a, b) => Number(b.id) - Number(a.id))
 }
 
-export async function getSighting(id) {
+export async function getMedia(id) {
   await delay()
-  const found = read().find((row) => String(row.id) === String(id))
+  const found = read().media.find((m) => String(m.id) === String(id))
   if (!found) throw new Error('Not found')
   return found
 }
 
-export async function createSighting(input) {
+export async function createMedia(input) {
   await delay()
+  const store = read()
   const created = {
-    ...input,
-    id: crypto.randomUUID(),
-    reported_at: new Date().toISOString(),
+    id: uid('m'),
+    title: input.title,
+    type: input.type,
+    status: input.status || 'planned',
+    posterUrl: input.posterUrl || '',
   }
-  write([...read(), created])
+  store.media.push(created)
+  write(store)
   return created
 }
 
-export async function updateSighting(id, input) {
+export async function updateMedia(id, input) {
   await delay()
-  const rows = read()
-  const index = rows.findIndex((row) => String(row.id) === String(id))
+  const store = read()
+  const index = store.media.findIndex((m) => String(m.id) === String(id))
   if (index === -1) throw new Error('Not found')
-  rows[index] = { ...rows[index], ...input }
-  write(rows)
-  return rows[index]
+  store.media[index] = { ...store.media[index], ...input }
+  write(store)
+  return store.media[index]
 }
 
-export async function deleteSighting(id) {
+export async function deleteMedia(id) {
   await delay()
-  write(read().filter((row) => String(row.id) !== String(id)))
+  const store = read()
+  store.media = store.media.filter((m) => String(m.id) !== String(id))
+  store.reviews = store.reviews.filter((r) => String(r.mediaId) !== String(id))
+  write(store)
+}
+
+// ---- reviews (a media item can have many, for rewatches) ----
+
+export async function listReviews(mediaId) {
+  await delay()
+  return read()
+    .reviews.filter((r) => String(r.mediaId) === String(mediaId))
+    .sort((a, b) => b.watchedAt.localeCompare(a.watchedAt))
+}
+
+export async function createReview(mediaId, input) {
+  await delay()
+  const store = read()
+  const created = {
+    id: uid('r'),
+    mediaId: String(mediaId),
+    rating: input.rating,
+    thoughts: input.thoughts || '',
+    watchedAt: input.watchedAt || new Date().toISOString().slice(0, 10),
+  }
+  store.reviews.push(created)
+  write(store)
+  return created
+}
+
+export async function updateReview(id, input) {
+  await delay()
+  const store = read()
+  const index = store.reviews.findIndex((r) => String(r.id) === String(id))
+  if (index === -1) throw new Error('Not found')
+  store.reviews[index] = { ...store.reviews[index], ...input }
+  write(store)
+  return store.reviews[index]
+}
+
+export async function deleteReview(id) {
+  await delay()
+  const store = read()
+  store.reviews = store.reviews.filter((r) => String(r.id) !== String(id))
+  write(store)
 }

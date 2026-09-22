@@ -4,24 +4,19 @@
 -- against the database your live demo depends on. Check which DATABASE_URL is
 -- loaded before you run it.
 
-TRUNCATE TABLE sightings RESTART IDENTITY CASCADE;
+TRUNCATE TABLE reviews RESTART IDENTITY CASCADE;
+TRUNCATE TABLE media RESTART IDENTITY CASCADE;
 
-INSERT INTO sightings (place, description, spookiness, reported_at) VALUES
-  ('Library, third floor',
-   'Chairs rearranged overnight, every time. The night guard says he locks the room himself.',
-   3, now() - interval '12 days'),
-  ('Old gym',
-   'Lights flicker in a fixed pattern after 9pm, always three short and one long.',
-   4, now() - interval '10 days'),
-  ('Parking basement',
-   'Footsteps with no one there. Reported separately by three different people in one week, which is what makes this one hard to dismiss. Two of them were alone at the time and did not know about the others. This row is deliberately long, because a seed of four words hides every text-wrapping bug you have.',
-   5, now() - interval '8 days'),
-  ('Canteen',
-   'A cold spot near the back door, every morning before seven.',
-   1, now() - interval '7 days'),
-  ('AB Building stairwell',
-   '',
-   2, now() - interval '5 days'),
-  ('Chapel garden',
-   'Someone humming. Stops the moment you turn around.',
-   3, now() - interval '2 days');
+INSERT INTO media (title, type, status, poster_url) VALUES
+  ('The Bear', 'tv', 'watching', 'https://via.placeholder.com/200x300?text=The+Bear'),
+  ('Dune: Part Two', 'movie', 'completed', 'https://via.placeholder.com/200x300?text=Dune+2'),
+  ('Severance', 'tv', 'completed', 'https://via.placeholder.com/200x300?text=Severance'),
+  ('Poor Things', 'movie', 'planned', 'https://via.placeholder.com/200x300?text=Poor+Things'),
+  ('The Idea of You', 'movie', 'dropped', 'https://via.placeholder.com/200x300?text=The+Idea+of+You');
+
+-- media_id values below assume the inserts above ran in order, starting at 1
+-- (RESTART IDENTITY guarantees that on a fresh seed).
+INSERT INTO reviews (media_id, rating, thoughts, watched_at) VALUES
+  (2, 5, 'Villeneuve sticks the landing. Best sequel in years.', CURRENT_DATE - INTERVAL '20 days'),
+  (3, 4, 'First watch: the twist episode wrecked me.', CURRENT_DATE - INTERVAL '60 days'),
+  (3, 5, 'Rewatch after season 2 dropped -- holds up even better knowing where it goes.', CURRENT_DATE - INTERVAL '3 days');

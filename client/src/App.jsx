@@ -1,33 +1,65 @@
 import { useEffect, useState } from 'react'
-import { listSightings, createSighting, deleteSighting } from './api'
+import {
+  listMedia,
+  createMedia,
+  deleteMedia,
+  listReviews,
+  createReview,
+  deleteReview,
+} from './api'
 import DemoNotice from './components/DemoNotice.jsx'
 
-// A deliberately small working app. Replace all of it with your own project.
-//
-// What is worth keeping is the SHAPE: four states rather than two, a loading
-// message that admits a free-tier server can be slow to wake, and errors that
-// say something rather than rendering an empty list.
+// Four states, not two: loading, ready, empty and error each look different,
+// because "nothing here yet" and "we could not find out" are different
+// situations and must not read the same way to the person using this.
 
-const EMPTY_FORM = { place: '', description: '', spookiness: 3 }
+const EMPTY_MEDIA_FORM = { title: '', type: 'movie', status: 'planned', posterUrl: '' }
+const EMPTY_REVIEW_FORM = { rating: 5, thoughts: '', watchedAt: '' }
+
+const STATUS_LABELS = {
+  planned: 'Planned',
+  watching: 'Watching',
+  completed: 'Completed',
+  dropped: 'Dropped',
+}
+
+function Stars({ rating }) {
+  return (
+    <span aria-label={`${rating} out of 5 stars`}>
+      {'★'.repeat(rating)}
+      {'☆'.repeat(5 - rating)}
+    </span>
+  )
+}
 
 export default function App() {
-  const [status, setStatus] = useState('loading')   // loading | ready | error
+  const [status, setStatus] = useState('loading') // loading | ready | error
   const [rows, setRows] = useState([])
   const [error, setError] = useState(null)
   const [slow, setSlow] = useState(false)
-  const [form, setForm] = useState(EMPTY_FORM)
+
+  // Filters, applied server-side (or in the mock's in-memory filter).
+  const [statusFilter, setStatusFilter] = useState('')
+  const [typeFilter, setTypeFilter] = useState('')
+
+  // Add-media form
+  const [form, setForm] = useState(EMPTY_MEDIA_FORM)
   const [saving, setSaving] = useState(false)
+
+  // Accordion: which media id is expanded, plus that title's reviews.
+  const [expandedId, setExpandedId] = useState(null)
+  const [reviews, setReviews] = useState([])
+  const [reviewsStatus, setReviewsStatus] = useState('ready') // loading | ready | error
+  const [reviewForm, setReviewForm] = useState(EMPTY_REVIEW_FORM)
+  const [savingReview, setSavingReview] = useState(false)
 
   async function load() {
     setStatus('loading')
     setError(null)
-
-    // A free-tier API sleeps. If this is taking a while, say so rather than
-    // spinning silently, which looks broken. See page 6.
     const timer = setTimeout(() => setSlow(true), 3000)
 
     try {
-      setRows(await listSightings())
+      setRows(await listMedia({ status: statusFilter, type: typeFilter }))
       setStatus('ready')
     } catch (caught) {
       setError(caught)
@@ -40,21 +72,29 @@ export default function App() {
 
   useEffect(() => {
     load()
-  }, [])
+    // Collapse any open card when the filters change, since it may no
+    // longer be in the list.
+    setExpandedId(null)
+  }, [statusFilter, typeFilter])
 
-  async function handleSubmit(event) {
+  async function handleAddMedia(event) {
     event.preventDefault()
-    if (!form.place.trim()) return
+    if (!form.title.trim()) return
 
     setSaving(true)
     try {
-      const created = await createSighting({
-        place: form.place.trim(),
-        description: form.description.trim(),
-        spookiness: Number(form.spookiness),
+      const created = await createMedia({
+        title: form.title.trim(),
+        type: form.type,
+        status: form.status,
+        posterUrl: form.posterUrl.trim(),
       })
-      setRows([created, ...rows])
-      setForm(EMPTY_FORM)
+      // Only show it immediately if it matches the current filters.
+      const matches =
+        (!statusFilter || created.status === statusFilter) &&
+        (!typeFilter || created.type === typeFilter)
+      if (matches) setRows([created, ...rows])
+      setForm(EMPTY_MEDIA_FORM)
     } catch (caught) {
       setError(caught)
     } finally {
@@ -62,13 +102,60 @@ export default function App() {
     }
   }
 
-  async function handleDelete(id) {
+  async function handleDeleteMedia(id) {
     const previous = rows
-    setRows(rows.filter((row) => row.id !== id))   // optimistic
+    setRows(rows.filter((row) => row.id !== id))
+    if (expandedId === id) setExpandedId(null)
     try {
-      await deleteSighting(id)
+      await deleteMedia(id)
     } catch (caught) {
-      setRows(previous)                            // put it back on failure
+      setRows(previous)
+      setError(caught)
+    }
+  }
+
+  async function toggleExpand(id) {
+    if (expandedId === id) {
+      setExpandedId(null)
+      return
+    }
+    setExpandedId(id)
+    setReviewForm(EMPTY_REVIEW_FORM)
+    setReviewsStatus('loading')
+    try {
+      setReviews(await listReviews(id))
+      setReviewsStatus('ready')
+    } catch (caught) {
+      setError(caught)
+      setReviewsStatus('error')
+    }
+  }
+
+  async function handleAddReview(event) {
+    event.preventDefault()
+    setSavingReview(true)
+    try {
+      const created = await createReview(expandedId, {
+        rating: Number(reviewForm.rating),
+        thoughts: reviewForm.thoughts.trim(),
+        watchedAt: reviewForm.watchedAt || undefined,
+      })
+      setReviews([created, ...reviews])
+      setReviewForm(EMPTY_REVIEW_FORM)
+    } catch (caught) {
+      setError(caught)
+    } finally {
+      setSavingReview(false)
+    }
+  }
+
+  async function handleDeleteReview(id) {
+    const previous = reviews
+    setReviews(reviews.filter((review) => review.id !== id))
+    try {
+      await deleteReview(id)
+    } catch (caught) {
+      setReviews(previous)
       setError(caught)
     }
   }
@@ -76,10 +163,9 @@ export default function App() {
   return (
     <div className="page">
       <header>
-        <h1>HAUnted Sightings</h1>
+        <h1>BingeBox</h1>
         <p className="lede">
-          Replace this with your own project. This one is here so the template
-          has something that works.
+          Track what you watch, rate it, and keep your thoughts on rewatches.
         </p>
       </header>
 
@@ -91,46 +177,78 @@ export default function App() {
         </p>
       )}
 
-      <form onSubmit={handleSubmit} className="card">
-        <h2>Report a sighting</h2>
+      <div className="card">
+        <h2>Filter your list</h2>
+        <label htmlFor="statusFilter">Status</label>
+        <select
+          id="statusFilter"
+          value={statusFilter}
+          onChange={(event) => setStatusFilter(event.target.value)}
+        >
+          <option value="">All statuses</option>
+          {Object.entries(STATUS_LABELS).map(([value, label]) => (
+            <option key={value} value={value}>{label}</option>
+          ))}
+        </select>
 
-        <label htmlFor="place">Place</label>
+        <label htmlFor="typeFilter">Type</label>
+        <select
+          id="typeFilter"
+          value={typeFilter}
+          onChange={(event) => setTypeFilter(event.target.value)}
+        >
+          <option value="">Movies and TV</option>
+          <option value="movie">Movies only</option>
+          <option value="tv">TV only</option>
+        </select>
+      </div>
+
+      <form onSubmit={handleAddMedia} className="card">
+        <h2>Add a title</h2>
+
+        <label htmlFor="title">Title</label>
         <input
-          id="place"
-          value={form.place}
-          onChange={(event) => setForm({ ...form, place: event.target.value })}
-          maxLength={120}
+          id="title"
+          value={form.title}
+          onChange={(event) => setForm({ ...form, title: event.target.value })}
+          maxLength={200}
           required
         />
 
-        <label htmlFor="description">What happened</label>
-        <textarea
-          id="description"
-          value={form.description}
-          onChange={(event) => setForm({ ...form, description: event.target.value })}
-          maxLength={2000}
-          rows={3}
-        />
+        <label htmlFor="type">Type</label>
+        <select
+          id="type"
+          value={form.type}
+          onChange={(event) => setForm({ ...form, type: event.target.value })}
+        >
+          <option value="movie">Movie</option>
+          <option value="tv">TV show</option>
+        </select>
 
-        <label htmlFor="spookiness">Spookiness, 1 to 5</label>
+        <label htmlFor="mediaStatus">Status</label>
+        <select
+          id="mediaStatus"
+          value={form.status}
+          onChange={(event) => setForm({ ...form, status: event.target.value })}
+        >
+          {Object.entries(STATUS_LABELS).map(([value, label]) => (
+            <option key={value} value={value}>{label}</option>
+          ))}
+        </select>
+
+        <label htmlFor="posterUrl">Poster URL (optional)</label>
         <input
-          id="spookiness"
-          type="number"
-          min="1"
-          max="5"
-          value={form.spookiness}
-          onChange={(event) => setForm({ ...form, spookiness: event.target.value })}
-          required
+          id="posterUrl"
+          value={form.posterUrl}
+          onChange={(event) => setForm({ ...form, posterUrl: event.target.value })}
+          placeholder="https://..."
         />
 
         <button type="submit" disabled={saving}>
-          {saving ? 'Saving...' : 'Add sighting'}
+          {saving ? 'Saving...' : 'Add title'}
         </button>
       </form>
 
-      {/* Four states. Empty and error are different things and must not look
-          the same: an empty list means "nothing here yet", an error means
-          "we could not find out". */}
       {status === 'loading' && (
         <p className="muted">
           Loading{slow ? '. The server may be waking up, which can take up to a minute.' : '...'}
@@ -138,7 +256,7 @@ export default function App() {
       )}
 
       {status === 'ready' && rows.length === 0 && (
-        <p className="muted">No sightings reported yet. Add the first one above.</p>
+        <p className="muted">Nothing matches these filters yet. Add a title above.</p>
       )}
 
       {status === 'ready' && rows.length > 0 && (
@@ -146,20 +264,93 @@ export default function App() {
           {rows.map((row) => (
             <li key={row.id} className="card">
               <div className="row-head">
-                <h3>{row.place}</h3>
-                <span className="spooky" aria-label={`Spookiness ${row.spookiness} of 5`}>
-                  {'*'.repeat(row.spookiness)}
+                <h3>{row.title}</h3>
+                <span className="muted">
+                  {row.type === 'tv' ? 'TV' : 'Movie'} · {STATUS_LABELS[row.status]}
                 </span>
               </div>
-              {row.description
-                ? <p>{row.description}</p>
-                : <p className="muted">No description given.</p>}
+
+              {row.posterUrl && (
+                <img
+                  src={row.posterUrl}
+                  alt=""
+                  style={{ maxWidth: '120px', borderRadius: '.4rem', margin: '.5rem 0' }}
+                />
+              )}
+
               <footer>
-                <time dateTime={row.reported_at}>
-                  {new Date(row.reported_at).toLocaleString()}
-                </time>
-                <button onClick={() => handleDelete(row.id)}>Delete</button>
+                <button onClick={() => toggleExpand(row.id)}>
+                  {expandedId === row.id ? 'Hide reviews' : 'Reviews'}
+                </button>
+                <button onClick={() => handleDeleteMedia(row.id)}>Delete</button>
               </footer>
+
+              {expandedId === row.id && (
+                <div className="card" style={{ marginTop: '.75rem' }}>
+                  <h4>Your reviews</h4>
+
+                  {reviewsStatus === 'loading' && <p className="muted">Loading reviews...</p>}
+
+                  {reviewsStatus === 'ready' && reviews.length === 0 && (
+                    <p className="muted">No reviews yet. Add one below, including on a rewatch.</p>
+                  )}
+
+                  {reviewsStatus === 'ready' && reviews.length > 0 && (
+                    <ul className="list">
+                      {reviews.map((review) => (
+                        <li key={review.id}>
+                          <Stars rating={review.rating} />{' '}
+                          <time dateTime={review.watchedAt}>
+                            {new Date(review.watchedAt).toLocaleDateString()}
+                          </time>
+                          {review.thoughts && <p>{review.thoughts}</p>}
+                          <button onClick={() => handleDeleteReview(review.id)}>Delete</button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  <form onSubmit={handleAddReview}>
+                    <label htmlFor="rating">Rating, 1 to 5</label>
+                    <input
+                      id="rating"
+                      type="number"
+                      min="1"
+                      max="5"
+                      value={reviewForm.rating}
+                      onChange={(event) =>
+                        setReviewForm({ ...reviewForm, rating: event.target.value })
+                      }
+                      required
+                    />
+
+                    <label htmlFor="thoughts">Thoughts</label>
+                    <textarea
+                      id="thoughts"
+                      value={reviewForm.thoughts}
+                      onChange={(event) =>
+                        setReviewForm({ ...reviewForm, thoughts: event.target.value })
+                      }
+                      maxLength={2000}
+                      rows={3}
+                    />
+
+                    <label htmlFor="watchedAt">Date watched (optional, defaults to today)</label>
+                    <input
+                      id="watchedAt"
+                      type="date"
+                      value={reviewForm.watchedAt}
+                      onChange={(event) =>
+                        setReviewForm({ ...reviewForm, watchedAt: event.target.value })
+                      }
+                    />
+
+                    <button type="submit" disabled={savingReview}>
+                      {savingReview ? 'Saving...' : 'Add review'}
+                    </button>
+                  </form>
+                </div>
+              )}
             </li>
           ))}
         </ul>
