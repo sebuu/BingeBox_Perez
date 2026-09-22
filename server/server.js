@@ -16,6 +16,16 @@ const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:5173')
 app.use(cors({ origin: allowedOrigins }))
 app.use(express.json({ limit: '100kb' }))
 
+// A friendly landing message. This is an API with no homepage of its own --
+// the React client is what actually calls these routes -- but a plain 404
+// here reads as broken to anyone who clicks the link by hand.
+app.get('/', (request, response) => {
+  response.json({
+    message: 'BingeBox API is running.',
+    endpoints: ['/healthz', '/readyz', '/api/media', '/api/media/:id/reviews'],
+  })
+})
+
 app.get('/healthz', (request, response) => {
   response.json({ ok: true })
 })
