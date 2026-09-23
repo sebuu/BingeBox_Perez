@@ -25,11 +25,19 @@ const STATUS_LABELS = {
 
 function Stars({ rating }) {
   return (
-    <span aria-label={`${rating} out of 5 stars`}>
+    <span className="review-stars" aria-label={`${rating} out of 5 stars`}>
       {'★'.repeat(rating)}
       {'☆'.repeat(5 - rating)}
     </span>
   )
+}
+
+// The average of a title's reviews, shown as the ticket's stamped rating.
+// Titles with no reviews yet show a dash instead of a misleading 0.
+function averageRating(mediaReviews) {
+  if (!mediaReviews || mediaReviews.length === 0) return null
+  const total = mediaReviews.reduce((sum, review) => sum + review.rating, 0)
+  return Math.round((total / mediaReviews.length) * 10) / 10
 }
 
 export default function App() {
@@ -179,28 +187,34 @@ export default function App() {
 
       <div className="card">
         <h2>Filter your list</h2>
-        <label htmlFor="statusFilter">Status</label>
-        <select
-          id="statusFilter"
-          value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value)}
-        >
-          <option value="">All statuses</option>
-          {Object.entries(STATUS_LABELS).map(([value, label]) => (
-            <option key={value} value={value}>{label}</option>
-          ))}
-        </select>
+        <div className="filters-row">
+          <div>
+            <label htmlFor="statusFilter">Status</label>
+            <select
+              id="statusFilter"
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+            >
+              <option value="">All statuses</option>
+              {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          </div>
 
-        <label htmlFor="typeFilter">Type</label>
-        <select
-          id="typeFilter"
-          value={typeFilter}
-          onChange={(event) => setTypeFilter(event.target.value)}
-        >
-          <option value="">Movies and TV</option>
-          <option value="movie">Movies only</option>
-          <option value="tv">TV only</option>
-        </select>
+          <div>
+            <label htmlFor="typeFilter">Type</label>
+            <select
+              id="typeFilter"
+              value={typeFilter}
+              onChange={(event) => setTypeFilter(event.target.value)}
+            >
+              <option value="">Movies and TV</option>
+              <option value="movie">Movies only</option>
+              <option value="tv">TV only</option>
+            </select>
+          </div>
+        </div>
       </div>
 
       <form onSubmit={handleAddMedia} className="card">
@@ -261,32 +275,39 @@ export default function App() {
 
       {status === 'ready' && rows.length > 0 && (
         <ul className="list">
-          {rows.map((row) => (
-            <li key={row.id} className="card">
-              <div className="row-head">
-                <h3>{row.title}</h3>
-                <span className="muted">
-                  {row.type === 'tv' ? 'TV' : 'Movie'} · {STATUS_LABELS[row.status]}
-                </span>
+          {rows.map((row) => {
+            const avg = expandedId === row.id ? averageRating(reviews) : null
+            return (
+            <li key={row.id} className="card ticket">
+              {row.posterUrl ? (
+                <img className="ticket-poster" src={row.posterUrl} alt="" />
+              ) : (
+                <div className="ticket-poster-placeholder">
+                  {row.type === 'tv' ? 'TV' : '🎬'}
+                </div>
+              )}
+              <div className="ticket-perforation" aria-hidden="true"></div>
+
+              <div className="ticket-body">
+                <div className="ticket-top">
+                  <h3>{row.title}</h3>
+                  {avg != null && <span className="stamp">{avg}★</span>}
+                </div>
+                <div className="ticket-meta">
+                  {row.type === 'tv' ? 'TV' : 'Movie'}{' '}
+                  <span className="status-tag">{STATUS_LABELS[row.status]}</span>
+                </div>
+
+                <div className="ticket-actions">
+                  <button onClick={() => toggleExpand(row.id)}>
+                    {expandedId === row.id ? 'Hide reviews' : 'Reviews'}
+                  </button>
+                  <button onClick={() => handleDeleteMedia(row.id)}>Delete</button>
+                </div>
               </div>
 
-              {row.posterUrl && (
-                <img
-                  src={row.posterUrl}
-                  alt=""
-                  style={{ maxWidth: '120px', borderRadius: '.4rem', margin: '.5rem 0' }}
-                />
-              )}
-
-              <footer>
-                <button onClick={() => toggleExpand(row.id)}>
-                  {expandedId === row.id ? 'Hide reviews' : 'Reviews'}
-                </button>
-                <button onClick={() => handleDeleteMedia(row.id)}>Delete</button>
-              </footer>
-
               {expandedId === row.id && (
-                <div className="card" style={{ marginTop: '.75rem' }}>
+                <div className="reviews-panel" style={{ gridColumn: '1 / -1' }}>
                   <h4>Your reviews</h4>
 
                   {reviewsStatus === 'loading' && <p className="muted">Loading reviews...</p>}
@@ -298,7 +319,7 @@ export default function App() {
                   {reviewsStatus === 'ready' && reviews.length > 0 && (
                     <ul className="list">
                       {reviews.map((review) => (
-                        <li key={review.id}>
+                        <li key={review.id} className="review-entry">
                           <Stars rating={review.rating} />{' '}
                           <time dateTime={review.watchedAt}>
                             {new Date(review.watchedAt).toLocaleDateString()}
@@ -352,7 +373,8 @@ export default function App() {
                 </div>
               )}
             </li>
-          ))}
+            )
+          })}
         </ul>
       )}
     </div>
